@@ -35,6 +35,12 @@ import org.ruleml.oojdrew.util.SymbolTable;
  *
  * <p>This is a focused first contribution derived from the callable engine
  * integration proven in Rule-Propagated Service Orchestration (RPSO).</p>
+ *
+ * <p>Original callable OO jDREW interface developed by AlexanderAdelAU
+ * for the RPSO project; adapted here as a standalone API. OO jDREW's
+ * underlying reasoning engine retains its original authorship.</p>
+ *
+ * @author AlexanderAdelAU
  */
 public final class OOjdrewAPI {
     private static final Object ENGINE_LOCK = new Object();
