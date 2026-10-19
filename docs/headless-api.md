@@ -51,9 +51,19 @@ fork of `OOjDREW/OOjDREW`, run its build in a compatible Java/Maven environment.
 The upstream `pom.xml` uses the `java-version` property, so the appropriate
 value may need to be supplied, e.g. `mvn -Djava-version=1.8 test`.
 
-This contribution was adapted from the callable OO jDREW wrapper developed in
-[Rule-Propagated Service Orchestration](https://github.com/AlexanderAdelAU/Rule-Propagated-Service-Orchestration)
-without incorporating RPSO services, tokens, or workflow rules.
+## Origins and acknowledgements
+
+**Original callable API developer: [AlexanderAdelAU](https://github.com/AlexanderAdelAU).**
+
+AlexanderAdelAU extracted OO jDREW's reasoning functionality into a
+programmatically callable Java interface for
+[Rule-Propagated Service Orchestration (RPSO)](https://github.com/AlexanderAdelAU/Rule-Propagated-Service-Orchestration).
+This headless facade is a general-purpose adaptation of that interface,
+without RPSO services, tokens, or workflow rules.
+
+The reasoning algorithms and original OO jDREW project are the work of
+the original OO jDREW contributors. Their copyright notices and the
+repository's LGPL licensing remain applicable.
 
 ## History
 
