@@ -1,72 +1,121 @@
-# Using OO jDREW as a headless Java rule engine
+# OO jDREW callable Java API
 
-The `org.ruleml.oojdrew.api.OOjdrewAPI` class offers an embeddable interface to
-OO jDREW's existing top-down RuleML reasoner. It does not launch a UI, and
-applications do not need to implement GUI callbacks to query a knowledge base.
+OO jDREW provides a headless Java interface, `org.ruleml.oojdrew.api.OOjdrewAPI`,
+for loading RuleML knowledge bases and querying the top-down reasoner without
+starting a GUI.
 
-## Example
+**The original callable API is the primary interface.** The methods and
+incremental query mechanism originated in
+[AlexanderAdelAU's RPSO project](https://github.com/AlexanderAdelAU/Rule-Propagated-Service-Orchestration).
+The optional `queryRuleML(String)` method retrieves all solutions at once.
+It is an addition, **not a replacement** for the original API.
+
+## Original interface — incremental solutions
+
+```java
+import org.ruleml.oojdrew.api.OOjdrewAPI;
+
+OOjdrewAPI engine = new OOjdrewAPI();
+String ruleBase = "<Assert><Rulebase mapClosure=\"universal\">"
+    + "<Atom><Rel>colour</Rel><Ind>blue</Ind></Atom>"
+    + "</Rulebase></Assert>";
+
+engine.parseKnowledgeBase(ruleBase, false);
+engine.issueRuleMLQuery(
+    "<Query><Atom><Rel>colour</Rel><Var>x</Var></Atom></Query>");
+
+// The initial answer, if present, is exposed in rowData.
+if (engine.rowsReturned > 0) {
+    do {
+        for (int i = 0; i < engine.rowsReturned; i++) {
+            System.out.println(engine.rowData[i][0]
+                    + " = " + engine.rowData[i][1]);
+        }
+        if (!engine.hasNext) {
+            break;
+        }
+        engine.nextSolution();
+    } while (true);
+}
+```
+
+Original public members are retained:
+
+- `getRuleBaset(String)` reads a knowledge base from a file (historic method
+  spelling retained for compatibility).
+- `parseKnowledgeBase(String, boolean)` takes RuleML text when the second
+  argument is `false`, or a file path when it is `true`.
+- `issueRuleMLQuery(String)` evaluates the query and exposes its first answer
+  through `rowData`, `rowsReturned` and `hasNext`.
+- `nextSolution()` advances to the next available answer. It throws when
+  there is no open query or no next solution.
+- `run()` remains a no-op legacy GUI entry point.
+
+The public `rowData` array has 16 variable-binding rows, as in the original
+implementation. Parsing and query errors are logged through the existing
+Log4j handler. Applications needing more variable bindings or explicit
+exceptions require a separate API enhancement.
+
+## Optional interface — all solutions
 
 ```java
 import java.util.List;
 import java.util.Map;
-import org.ruleml.oojdrew.api.OOjdrewAPI;
 
-OOjdrewAPI engine = new OOjdrewAPI();
-engine.loadRuleML("<Assert><Rulebase mapClosure=\"universal\">"
-    + "<Atom><Rel>colour</Rel><Ind>blue</Ind></Atom>"
-    + "</Rulebase></Assert>");
-List<Map<String, String>> answers = engine.queryRuleML(
+List<Map<String, String>> solutions = engine.queryRuleML(
     "<Query><Atom><Rel>colour</Rel><Var>x</Var></Atom></Query>");
-System.out.println(answers);
+
+for (Map<String, String> solution : solutions) {
+    System.out.println(solution.get("?x"));
+}
 ```
 
-`loadRuleML` takes a RuleML document **string**, not a filename. Read a file
-into a string before passing it to the API. `queryRuleML` returns immutable
-snapshots of the variable bindings for every solution; an empty list means no
-solutions. Parsing and query failures raise `IllegalArgumentException` with a
-cause. Querying before a knowledge base is loaded raises `IllegalStateException`.
+`queryRuleML` performs the same query but collects all answers into an
+immutable list of immutable maps. It consumes the current query cursor.
+The original incremental query methods are **still available** to callers
+who do not want to materialize all results at once.
 
-## Concurrency and lifecycle
+For a query with no variable bindings, a successful solution is represented
+by an empty map; no matching solutions produces an empty list.
 
-Each API instance owns its last successfully loaded knowledge base. All
-operations on instances of *this API* are serialized under a JVM-wide lock,
-because OO jDREW's `SymbolTable` uses global static state. A symbol-table reset
-invalidates stored clauses; the API automatically rebuilds the affected instance
-before its next query. Replacing the knowledge base creates a fresh
-`BackwardReasoner`, so OID and clause indexes do not accumulate across loads.
+## Concurrency and lifetime
 
-**Scope limitation:** Direct calls to OO jDREW's `SymbolTable`, `TopDownApp`,
-`BackwardReasoner`, or parsers do not participate in this API's lock and are
-not made thread safe by this facade. A future upstream engine-level change
-would be necessary for that guarantee.
+OO jDREW's `SymbolTable` is JVM-global. This facade uses a shared lock for
+parsing, querying and advancing the solution iterator; callers that use the
+facade are serialized. Rule bases and open iterators are re-established after
+a facade-driven symbol-table reset.
 
-The current query method materializes all solutions under the lock. Large or
-non-terminating queries can use excessive memory or block other API callers.
-A bounded or streaming API would be an appropriate separate enhancement.
+**Limitation:** lower-level OO jDREW classes used directly do not participate
+in this lock, so this facade cannot guarantee engine-wide thread safety.
+Similarly, public result fields are mutable and should not be shared between
+uncoordinated threads. The eager convenience method may use significant
+memory or block other callers for large or nonterminating queries.
 
-## Build and test
+## Compatibility with RPSO
 
-OO jDREW uses Maven and existing JUnit 3 tests. After applying the patch in a
-fork of `OOjDREW/OOjDREW`, run its build in a compatible Java/Maven environment.
-The upstream `pom.xml` uses the `java-version` property, so the appropriate
-value may need to be supplied, e.g. `mvn -Djava-version=1.8 test`.
+The callable method contract is preserved, but the upstream distribution uses
+a different Java package (`org.ruleml.oojdrew.api` instead of RPSO's
+`org.btsn.utils`). RPSO can retain its existing working wrapper without any
+change. A future migration would involve a deliberate import or adapter and
+library dependency update, tested independently; it is **not required** to
+use this contribution in other Java projects.
+
+## Build and tests
+
+The upstream OO jDREW project has a Java/Maven build and JUnit 3 regression
+tests. The fork's CI runs the existing and new tests with a JUnit 3-compatible
+Surefire version. Neither this contribution nor the workflow changes RPSO's
+Ant-only build process.
 
 ## Origins and acknowledgements
 
 **Original callable API developer: [AlexanderAdelAU](https://github.com/AlexanderAdelAU).**
 
-AlexanderAdelAU extracted OO jDREW's reasoning functionality into a
-programmatically callable Java interface for
-[Rule-Propagated Service Orchestration (RPSO)](https://github.com/AlexanderAdelAU/Rule-Propagated-Service-Orchestration).
-This headless facade is a general-purpose adaptation of that interface,
-without RPSO services, tokens, or workflow rules.
+The API was originally extracted for
+[Rule-Propagated Service Orchestration](https://github.com/AlexanderAdelAU/Rule-Propagated-Service-Orchestration),
+then contributed as a reusable OO jDREW interface. The underlying OO jDREW
+reasoning engine remains credited to its original authors, with its existing
+LGPL licensing preserved.
 
-The reasoning algorithms and original OO jDREW project are the work of
-the original OO jDREW contributors. Their copyright notices and the
-repository's LGPL licensing remain applicable.
-
-## History
-
-- Upstream discussion: https://github.com/OOjDREW/OOjDREW/issues/17
-- Original use case: https://github.com/AlexanderAdelAU/Rule-Propagated-Service-Orchestration
-- Related upstream concurrency discussion: https://github.com/OOjDREW/OOjDREW/issues/9
+- API proposal: https://github.com/OOjDREW/OOjDREW/issues/17
+- Related thread-safety discussion: https://github.com/OOjDREW/OOjDREW/issues/9
