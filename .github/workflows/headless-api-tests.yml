@@ -22,5 +22,7 @@ jobs:
           distribution: temurin
           java-version: '8'
           cache: maven
-      - name: Compile and run regression tests
-        run: mvn --batch-mode --no-transfer-progress -Djava-version=1.8 test
+      - name: Compile and run JUnit 3 regression tests
+        # Upstream uses JUnit 3.8.1, unsupported by the runner's newer
+        # default Surefire. Pin a compatible runner without changing pom.xml.
+        run: mvn --batch-mode --no-transfer-progress -Djava-version=1.8 test-compile org.apache.maven.plugins:maven-surefire-plugin:2.22.2:test
