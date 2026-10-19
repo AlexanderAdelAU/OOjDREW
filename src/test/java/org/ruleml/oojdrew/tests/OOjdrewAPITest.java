@@ -77,6 +77,38 @@ public class OOjdrewAPITest extends TestCase {
         }
     }
 
+    public void testFailedLoadKeepsPreviousKnowledgeBase() {
+        OOjdrewAPI api = new OOjdrewAPI();
+        api.loadRuleML(ruleBase("BeforeError"));
+        assertEquals(FACTS, api.queryRuleML(QUERY).size());
+        try {
+            api.loadRuleML("<Assert><Rulebase></Assert>");
+            fail("Malformed RuleML should be rejected");
+        } catch (IllegalArgumentException expected) {
+            assertNotNull(expected.getCause());
+        }
+        assertEquals(FACTS, api.queryRuleML(QUERY).size());
+    }
+
+    public void testQuerySurvivesSymbolTableReset() {
+        OOjdrewAPI original = new OOjdrewAPI();
+        original.loadRuleML(ruleBase("Survivor"));
+        assertEquals(FACTS, original.queryRuleML(QUERY).size());
+
+        // Push the shared symbol table past the wrapper's reset threshold,
+        // using a single thread so we don't bypass its concurrency lock.
+        for (int i = 0; i < 5200; i++) {
+            org.ruleml.oojdrew.util.SymbolTable.internSymbol(
+                    "headless-regression-symbol-" + i);
+        }
+        OOjdrewAPI resetter = new OOjdrewAPI();
+        resetter.loadRuleML(ruleBase("Resetter"));
+
+        assertEquals(FACTS, resetter.queryRuleML(QUERY).size());
+        assertEquals("An older facade must reparse after reset",
+                FACTS, original.queryRuleML(QUERY).size());
+    }
+
     private static String ruleBase(String prefix) {
         StringBuilder kb = new StringBuilder(
                 "<Assert><Rulebase mapClosure=\"universal\">");
