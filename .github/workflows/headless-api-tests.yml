@@ -1,0 +1,26 @@
+name: Headless API regression tests
+
+on:
+  push:
+    branches:
+      - feature/headless-reasoning-api
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  headless-api:
+    name: Java 8 regression tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out OO jDREW
+        uses: actions/checkout@v4
+      - name: Configure Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+          cache: maven
+      - name: Compile and run regression tests
+        run: mvn --batch-mode --no-transfer-progress -Djava-version=1.8 test
