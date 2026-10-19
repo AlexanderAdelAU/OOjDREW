@@ -1,5 +1,5 @@
-// OO jDREW - An Object Oriented extension of the Java Deductive Reasoning Engine for the Web
-// Copyright (C) 2026 OO jDREW contributors
+// OO jDREW - Object Oriented Java Deductive Reasoning Engine for the Web
+// Test coverage for the callable interface originally developed by AlexanderAdelAU.
 // Licensed under the GNU Lesser General Public License, version 2.1 or later.
 package org.ruleml.oojdrew.tests;
 
@@ -9,8 +9,9 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import junit.framework.TestCase;
 import org.ruleml.oojdrew.api.OOjdrewAPI;
+import org.ruleml.oojdrew.util.SymbolTable;
 
-/** Functional and concurrent usage checks for the headless facade. */
+/** Check the original lazy contract and the optional eager convenience method. */
 public class OOjdrewAPITest extends TestCase {
     private static final int FACTS = 20;
     private static final String QUERY =
@@ -18,95 +19,121 @@ public class OOjdrewAPITest extends TestCase {
             "<Var>s</Var><Var>o</Var><Var>c</Var><Var>p</Var>" +
             "</Atom></Query>";
 
-    public void testQueryReturnsIndependentResults() {
+    public void testOriginalIssueQueryAndNextSolution() {
         OOjdrewAPI api = new OOjdrewAPI();
-        api.loadRuleML(ruleBase("First"));
+        api.parseKnowledgeBase(ruleBase("Legacy"), false);
+        api.issueRuleMLQuery(QUERY);
+        assertTrue(api.rowsReturned > 0);
+        assertNotNull(api.rowData[0][0]);
+        assertEquals(FACTS, countCurrentAndRemainingSolutions(api));
+        assertFalse(api.hasNext);
+    }
+
+    public void testOriginalRepeatedRulebaseLoadsDoNotAccumulateResults() {
+        OOjdrewAPI api = new OOjdrewAPI();
+        for (int i = 0; i < 15; i++) {
+            api.parseKnowledgeBase(ruleBase("LegacyRepeated"), false);
+            assertEquals("reparse " + i, FACTS, countSolutions(api));
+        }
+    }
+
+    public void testOptionalEagerQueryReturnsDetachedImmutableResults() {
+        OOjdrewAPI api = new OOjdrewAPI();
+        api.parseKnowledgeBase(ruleBase("First"), false);
         List<Map<String, String>> first = api.queryRuleML(QUERY);
         assertEquals(FACTS, first.size());
         assertFalse(first.get(0).isEmpty());
 
-        api.loadRuleML(ruleBase("Second"));
+        api.parseKnowledgeBase(ruleBase("Second"), false);
         assertEquals(FACTS, api.queryRuleML(QUERY).size());
-        assertEquals(FACTS, first.size()); // detached from reloading
+        assertEquals(FACTS, first.size());
         try {
             first.clear();
-            fail("Query results should be immutable");
+            fail("The list of results must be immutable");
+        } catch (UnsupportedOperationException expected) {
+            // Expected.
+        }
+        try {
+            first.get(0).clear();
+            fail("Each solution must be immutable");
         } catch (UnsupportedOperationException expected) {
             // Expected.
         }
     }
 
-    public void testRepeatedLoadsDoNotAccumulateResults() {
-        OOjdrewAPI api = new OOjdrewAPI();
-        for (int i = 0; i < 15; i++) {
-            api.loadRuleML(ruleBase("Repeated"));
-            assertEquals("load " + i, FACTS, api.queryRuleML(QUERY).size());
-        }
-    }
-
-    public void testTwoInstancesCanLoadAndQueryConcurrently() throws Exception {
+    public void testOriginalApiConcurrentQueriesAndRepeatedParsing() throws Exception {
         final OOjdrewAPI queried = new OOjdrewAPI();
         final OOjdrewAPI reloaded = new OOjdrewAPI();
-        queried.loadRuleML(ruleBase("Queried"));
+        queried.parseKnowledgeBase(ruleBase("Queried"), false);
         final AtomicReference<Throwable> failure = new AtomicReference<Throwable>();
         Thread writer = new Thread(new Runnable() {
             public void run() {
                 try {
                     for (int i = 0; i < 35; i++) {
-                        reloaded.loadRuleML(ruleBase("Reloaded"));
-                        assertEquals(FACTS, reloaded.queryRuleML(QUERY).size());
+                        reloaded.parseKnowledgeBase(ruleBase("Reloaded"), false);
+                        assertEquals(FACTS, countSolutions(reloaded));
                     }
                 } catch (Throwable t) {
                     failure.compareAndSet(null, t);
                 }
             }
-        }, "oojdrew-reloader");
+        }, "oojdrew-legacy-reloader");
         writer.start();
         try {
             for (int i = 0; i < 35; i++) {
-                assertEquals("query " + i, FACTS,
-                        queried.queryRuleML(QUERY).size());
+                assertEquals("query " + i, FACTS, countSolutions(queried));
             }
         } finally {
             writer.join();
         }
         if (failure.get() != null) {
-            AssertionError error = new AssertionError("Background API use failed");
+            AssertionError error = new AssertionError("Concurrent API use failed");
             error.initCause(failure.get());
             throw error;
         }
     }
 
-    public void testFailedLoadKeepsPreviousKnowledgeBase() {
-        OOjdrewAPI api = new OOjdrewAPI();
-        api.loadRuleML(ruleBase("BeforeError"));
-        assertEquals(FACTS, api.queryRuleML(QUERY).size());
-        try {
-            api.loadRuleML("<Assert><Rulebase></Assert>");
-            fail("Malformed RuleML should be rejected");
-        } catch (IllegalArgumentException expected) {
-            assertNotNull(expected.getCause());
-        }
-        assertEquals(FACTS, api.queryRuleML(QUERY).size());
-    }
-
-    public void testQuerySurvivesSymbolTableReset() {
+    public void testOriginalLazyIteratorAfterSymbolTableReset() {
         OOjdrewAPI original = new OOjdrewAPI();
-        original.loadRuleML(ruleBase("Survivor"));
-        assertEquals(FACTS, original.queryRuleML(QUERY).size());
+        original.parseKnowledgeBase(ruleBase("Survivor"), false);
+        original.issueRuleMLQuery(QUERY);
+        assertTrue(original.rowsReturned > 0);
 
-        // Push the shared symbol table past the wrapper's reset threshold,
-        // using a single thread so we don't bypass its concurrency lock.
+        // Inflate the symbol table in this one test thread to force the next
+        // parseKnowledgeBase call to perform its normal epoch reset.
         for (int i = 0; i < 5200; i++) {
-            org.ruleml.oojdrew.util.SymbolTable.internSymbol(
-                    "headless-regression-symbol-" + i);
+            SymbolTable.internSymbol("headless-regression-symbol-" + i);
         }
         OOjdrewAPI resetter = new OOjdrewAPI();
-        resetter.loadRuleML(ruleBase("Resetter"));
+        resetter.parseKnowledgeBase(ruleBase("Resetter"), false);
+        assertEquals(FACTS, countSolutions(resetter));
+        assertEquals("The original cursor must resume after a reset",
+                FACTS, countCurrentAndRemainingSolutions(original));
+    }
 
-        assertEquals(FACTS, resetter.queryRuleML(QUERY).size());
-        assertEquals("An older facade must reparse after reset",
-                FACTS, original.queryRuleML(QUERY).size());
+    public void testEagerQueryWithoutVariablesIsAValidEmptyBinding() {
+        OOjdrewAPI api = new OOjdrewAPI();
+        api.parseKnowledgeBase(ruleBase("Boolean"), false);
+        String query = "<Query><Atom><Rel>activeService</Rel>"
+                + "<Ind>Boolean_Place0</Ind><Ind>Boolean_Operation</Ind>"
+                + "<Ind>ip0</Ind><Ind>5000</Ind></Atom></Query>";
+        List<Map<String, String>> results = api.queryRuleML(query);
+        assertEquals(1, results.size());
+        assertTrue(results.get(0).isEmpty());
+    }
+
+    private static int countSolutions(OOjdrewAPI api) {
+        api.issueRuleMLQuery(QUERY);
+        return api.rowsReturned == 0 ? 0 : countCurrentAndRemainingSolutions(api);
+    }
+
+    private static int countCurrentAndRemainingSolutions(OOjdrewAPI api) {
+        int result = 1;
+        while (api.hasNext) {
+            api.nextSolution();
+            result++;
+        }
+        return result;
     }
 
     private static String ruleBase(String prefix) {
