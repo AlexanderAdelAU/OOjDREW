@@ -18,7 +18,6 @@ import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
-
 import org.apache.log4j.Logger;
 import org.ruleml.oojdrew.Config;
 import org.ruleml.oojdrew.Configuration;
@@ -38,36 +37,15 @@ import org.ruleml.oojdrew.util.SymbolTable;
  * @author AlexanderAdelAU
  */
 public class OOjdrewAPI {
-	// private Configuration config;
-	// private TopDownUI ui;
-	// private DebugConsole debugConsole;
 	private static final Logger logger = Logger.getLogger(OOjdrewAPI.class);
-
-	// TODO: Rewrite all code that uses the following variables
-	// These variables were copied from the old UI
 	private Iterator<?> solit;
-	private Iterator<String> it;
-	private boolean t1Var;
-	private boolean t2Var;
-	private String term1VarName;
-	private String term2VarName;
-	private SubsumesStructure subPlus;
-	private SubsumesStructure sub;
-	private LUBGLBStructure lub;
-	private LUBGLBStructure glb;
-	// private String ruleBase;
-	// private static int MAXROWS = 16;
-	// private static int MAXCOLS = 2;
 	private static final int MAXROWS = 16;
 	private static final int MAXCOLS = 2;
 
 	Configuration config = new Config(OOjdrewAPI.class);
 
-	// Create the parsers
-	// RDFSParser rdfsParser = new RDFSParser();
-	// POSLParser poslParser = new POSLParser();
+	// Create the parser
 	RuleMLParser rmlParser = new RuleMLParser(config);
-	SubsumesParser subsumesParser = new SubsumesParser();
 
 	// Create the reasoning engine
 	BackwardReasoner backwardReasoner = new BackwardReasoner();
@@ -173,8 +151,6 @@ public class OOjdrewAPI {
 	}
 
 	private void defaultExceptionHandler(Exception e) {
-		// JOptionPane.showMessageDialog(ui.getFrmOoJdrew(), e.getMessage(),
-		// "Error", JOptionPane.ERROR_MESSAGE);
 		if (logger != null) {
 			logger.error(e.getMessage());
 		} else {
@@ -218,9 +194,6 @@ public class OOjdrewAPI {
 		}
 	}
 
-	// TODO: This method was copied from the old GUI and has been modified to
-	// work with the current code base. This code should be rewritten in a much
-	// cleaner fashion.
 	private void processQuery(DefiniteClause dc) {
 		// Reinitialise the Array
 		Object[][] rowdata = new Object[MAXROWS][MAXCOLS];
@@ -254,9 +227,6 @@ public class OOjdrewAPI {
 		solutionsReturned++;
 	}
 
-	// TODO: This method was copied from the old GUI and has been modified to
-	// work with the current code base. This code should be rewritten in a much
-	// cleaner fashion.
 	public void nextSolution() {
 		synchronized (ENGINE_LOCK) {
 			if (solit == null) {
